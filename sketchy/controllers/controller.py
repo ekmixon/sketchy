@@ -98,11 +98,10 @@ class CaptureViewList(Resource):
         """
         Retrieve all sketch records the database
         """
-        results = []
-        for row in Capture.query.order_by(Capture.id.desc()).all():
-            results.append(row.as_dict())
-
-        return results
+        return [
+            row.as_dict()
+            for row in Capture.query.order_by(Capture.id.desc()).all()
+        ]
 
     def post(self):
         """

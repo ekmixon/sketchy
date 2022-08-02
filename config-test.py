@@ -28,7 +28,7 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379'
 # Alternatively, you can export the 'host' variable on your system to set the
 # host and port.
 # If you are using Nginx with SSL, change the scheme to https.
-BASE_URL = 'http://%s' % os.getenv('host', '127.0.0.1:8000')
+BASE_URL = f"http://{os.getenv('host', '127.0.0.1:8000')}"
 
 # Local Screenshot storage
 LOCAL_STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files')

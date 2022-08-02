@@ -43,10 +43,8 @@ class Static(db.Model):
 
     def as_dict(self):
         """Return Static model as a JSON object"""
-        sketch_dict = {}
+        sketch_dict = {'id': self.id, 'filename': self.filename}
 
-        sketch_dict['id'] = self.id
-        sketch_dict['filename'] = self.filename
         if self.callback is not None: 
             sketch_dict['callback'] = self.callback
         sketch_dict['capture_status'] = self.capture_status

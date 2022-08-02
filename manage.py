@@ -125,10 +125,11 @@ class Start(Command):
 @manager.command
 def list_routes():
     output = []
-    func_list = {}
-    for rule in app.url_map.iter_rules():
-        if rule.endpoint != 'static':
-            func_list[rule.rule] = app.view_functions[rule.endpoint].__doc__
+    func_list = {
+        rule.rule: app.view_functions[rule.endpoint].__doc__
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint != 'static'
+    }
 
     from pprint import pprint
     pprint(func_list)

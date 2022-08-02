@@ -61,14 +61,11 @@ def check_url(self, capture_id=0, retries=0, model='capture'):
         verify_ssl = app.config['SSL_HOST_VALIDATION']
         response = requests.get(capture_record.url, verify=verify_ssl, allow_redirects=False, timeout=5, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:28.0) Gecko/20100101 Firefox/28.0"}, cookies=cookies)
         capture_record.url_response_code = response.status_code
+        capture_record.capture_status = f'{response.status_code} HTTP STATUS CODE'
         if capture_record.status_only:
             capture_record.job_status = 'COMPLETED'
-            capture_record.capture_status = '%s HTTP STATUS CODE' % (response.status_code)
             if capture_record.callback:
                 finisher(capture_record)
-        else:
-            capture_record.capture_status = '%s HTTP STATUS CODE' % (response.status_code)
-    # If URL doesn't return a valid status code or times out, raise an exception
     except Exception as err:
         capture_record.job_status = 'RETRY'
         capture_record.capture_status = str(err)
@@ -76,7 +73,6 @@ def check_url(self, capture_id=0, retries=0, model='capture'):
 
         check_url.retry(kwargs={'capture_id': capture_id, 'retries': capture_record.retry + 1, 'model': model}, exc=err, countdown=app.config['COOLDOWN'], max_retries=app.config['MAX_RETRIES'])
 
-    # If the code was not a good code, record the status as a 404 and raise an exception
     finally:
         db.session.commit()
     return str(response.status_code)
@@ -98,21 +94,28 @@ def do_capture(status_code, the_record, base_url, model='capture', phantomjs_tim
             app.config['PHANTOMJS'],
             '--ssl-protocol=any',
             '--ignore-ssl-errors=yes',
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/assets/static.js',
+            f'{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}/assets/static.js',
             app.config['LOCAL_STORAGE_FOLDER'],
-            capture_name]
+            capture_name,
+        ]
+
         content_to_parse = os.path.join(app.config['LOCAL_STORAGE_FOLDER'], capture_name)
     else:
-        capture_name = grab_domain(the_record.url) + '_' + str(the_record.id)
+        capture_name = f'{grab_domain(the_record.url)}_{str(the_record.id)}'
         service_args = [
             app.config['PHANTOMJS'],
             '--ssl-protocol=any',
             '--ignore-ssl-errors=yes',
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/assets/capture.js',
+            f'{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}/assets/capture.js',
             the_record.url,
-        os.path.join(app.config['LOCAL_STORAGE_FOLDER'], capture_name)]
+            os.path.join(app.config['LOCAL_STORAGE_FOLDER'], capture_name),
+        ]
 
-        content_to_parse = os.path.join(app.config['LOCAL_STORAGE_FOLDER'], capture_name + '.html')
+
+        content_to_parse = os.path.join(
+            app.config['LOCAL_STORAGE_FOLDER'], f'{capture_name}.html'
+        )
+
     # Using subprocess32 backport, call phantom and if process hangs kill it
     pid = subprocess32.Popen(service_args, stdout=PIPE, stderr=PIPE)
     try:
@@ -120,12 +123,12 @@ def do_capture(status_code, the_record, base_url, model='capture', phantomjs_tim
     except subprocess32.TimeoutExpired:
         pid.kill()
         stdout, stderr = pid.communicate()
-        app.logger.error('PhantomJS Capture timeout at {} seconds'.format(phantomjs_timeout))
+        app.logger.error(f'PhantomJS Capture timeout at {phantomjs_timeout} seconds')
         raise subprocess32.TimeoutExpired('phantomjs capture',phantomjs_timeout)
 
     # If the subprocess has an error, raise an exception
     if stderr or stdout:
-        raise Exception("{}{}".format(stdout, stderr))
+        raise Exception(f"{stdout}{stderr}")
 
     # Strip tags and parse out all text
     ignore_tags = ('script', 'noscript', 'style')
@@ -150,26 +153,30 @@ def do_capture(status_code, the_record, base_url, model='capture', phantomjs_tim
         capture_name = capture_name.split('.')[0]
 
     # Wite our html text that was parsed into our capture folder
-    parsed_text = open(os.path.join(app.config['LOCAL_STORAGE_FOLDER'], capture_name + '.txt'), 'wb')
+    parsed_text = open(
+        os.path.join(
+            app.config['LOCAL_STORAGE_FOLDER'], f'{capture_name}.txt'
+        ),
+        'wb',
+    )
+
     parsed_text.write(output)
 
     # Update the sketch record with the local URLs for the sketch, scrape, and html captures
-    the_record.sketch_url = base_url + '/files/' + capture_name + '.png'
-    the_record.scrape_url = base_url + '/files/' + capture_name + '.txt'
-    the_record.html_url = base_url + '/files/' + capture_name + '.html'
+    the_record.sketch_url = f'{base_url}/files/{capture_name}.png'
+    the_record.scrape_url = f'{base_url}/files/{capture_name}.txt'
+    the_record.html_url = f'{base_url}/files/{capture_name}.html'
 
     # Create a dict that contains what files may need to be written to S3
     files_to_write = defaultdict(list)
-    files_to_write['sketch'] = capture_name + '.png'
-    files_to_write['scrape'] = capture_name + '.txt'
-    files_to_write['html'] = capture_name + '.html'
+    files_to_write['sketch'] = f'{capture_name}.png'
+    files_to_write['scrape'] = f'{capture_name}.txt'
+    files_to_write['html'] = f'{capture_name}.html'
 
     # If we are not writing to S3, update the capture_status that we are completed.
     if not app.config['USE_S3']:
         the_record.job_status = "COMPLETED"
-        the_record.capture_status = "LOCAL_CAPTURES_CREATED"
-    else:
-        the_record.capture_status = "LOCAL_CAPTURES_CREATED"
+    the_record.capture_status = "LOCAL_CAPTURES_CREATED"
     db.session.commit()
     return files_to_write
 
@@ -190,7 +197,7 @@ def s3_save(files_to_write, the_record):
             calling_format = boto.s3.connection.OrdinaryCallingFormat()
         )
         key = Key(conn.get_bucket(app.config.get('S3_BUCKET_PREFIX')))
-        path = "sketchy/{}/{}".format(capture_type, file_name)
+        path = f"sketchy/{capture_type}/{file_name}"
         key.key = path
         key.set_contents_from_filename(app.config['LOCAL_STORAGE_FOLDER'] + '/' + file_name)
 
@@ -202,8 +209,10 @@ def s3_save(files_to_write, the_record):
             key=key.key,
             response_headers={
                 'response-content-type': response_types[capture_type],
-                'response-content-disposition': 'attachment; filename=' + file_name
-            })
+                'response-content-disposition': f'attachment; filename={file_name}',
+            },
+        )
+
 
         # Generate appropriate url based on capture_type
         if capture_type == 'sketch':
@@ -219,11 +228,9 @@ def s3_save(files_to_write, the_record):
     os.remove(os.path.join(app.config['LOCAL_STORAGE_FOLDER'], files_to_write['html']))
 
     # If we don't have a finisher task is complete
-    if the_record.callback:
-        the_record.capture_status = 'S3_ITEMS_SAVED'
-    else:
-        the_record.capture_status = 'S3_ITEMS_SAVED'
+    if not the_record.callback:
         the_record.job_status = 'COMPLETED'
+    the_record.capture_status = 'S3_ITEMS_SAVED'
     db.session.commit()
 
 
@@ -241,9 +248,13 @@ def finisher(the_record):
         # Blacklist IP addresses
         ip_addr = socket.gethostbyname(grab_domain(the_record.url))
 
-        if app.config['IP_BLACKLISTING']:
-            if netaddr.all_matching_cidrs(ip_addr, app.config['IP_BLACKLISTING_RANGE'].split(',')):
-                the_record.capture_status = "IP BLACKLISTED:{} - ".format(ip_addr) + the_record.capture_status
+        if app.config['IP_BLACKLISTING'] and netaddr.all_matching_cidrs(
+            ip_addr, app.config['IP_BLACKLISTING_RANGE'].split(',')
+        ):
+            the_record.capture_status = (
+                f"IP BLACKLISTED:{ip_addr} - " + the_record.capture_status
+            )
+
     except:
         pass
 

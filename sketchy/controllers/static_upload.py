@@ -81,22 +81,17 @@ class StaticViewList(Resource):
         """
         Ensure file is secure, is allowed, and generate a uniqe filename.
         """
-        if self.allowed_extension(f.filename):
-            filename = secure_filename(f.filename)
-            filename = str(uuid.uuid4()) + '-' + filename
-        else:
+        if not self.allowed_extension(f.filename):
             raise ValueError('not a valid file')
+        filename = secure_filename(f.filename)
+        filename = f'{str(uuid.uuid4())}-{filename}'
         return filename
 
     def get(self):
         """
         Retrieve all static records the database
         """
-        results = []
-        for row in Static.query.order_by(Static.id.desc()).all():
-            results.append(row.as_dict())
-
-        return results
+        return [row.as_dict() for row in Static.query.order_by(Static.id.desc()).all()]
 
     def post(self):
         """

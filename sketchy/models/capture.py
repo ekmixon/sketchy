@@ -45,10 +45,8 @@ class Capture(db.Model):
 
     def as_dict(self):
         """Return Capture model as a JSON object"""
-        sketch_dict = {}
+        sketch_dict = {'id': self.id, 'url': self.url}
 
-        sketch_dict['id'] = self.id
-        sketch_dict['url'] = self.url
         if self.status_only is not None: 
             sketch_dict['status_only'] = self.status_only
         if self.callback is not None: 
